@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FORWARD OPERATING BASE - Offline Open-World TPS Weapon Collection</title>
+    <meta name="description" content="Offline single-player open-world action TPS featuring survival, tactile weapon collection, smart FSM enemy factions, and local save-state persistence.">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts for Tactical Military UI -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,600;0,700;1,700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container"></div>
+
+    <!-- Crosshair HUD -->
+    <div id="crosshair">
+        <div class="dot"></div>
+        <div class="line top"></div>
+        <div class="line bottom"></div>
+        <div class="line left"></div>
+        <div class="line right"></div>
+    </div>
+
+    <!-- Dynamic Hit Indicator -->
+    <div id="hit-marker" class="hidden"></div>
+    <div id="damage-vignette" class="vignette-hidden"></div>
+
+    <!-- HUD Overlay -->
+    <div id="hud-overlay">
+        <!-- Top Status Bar: Compass & Zone Info -->
+        <div class="hud-top">
+            <div class="compass-bar" id="compass">
+                <span class="heading">N 000°</span>
+                <div class="zone-badge" id="zone-badge">ZONE 1: SURVIVOR RUINS</div>
+            </div>
+        </div>
+
+        <!-- Floating Interaction Prompt -->
+        <div id="interaction-prompt" class="prompt-hidden">
+            <div class="key-badge">E</div>
+            <div class="prompt-text">
+                <span class="action-label" id="prompt-action">SWAP WEAPON</span>
+                <span class="item-name" id="prompt-item-name">M4A1 RIFLE</span>
+                <span class="item-stats" id="prompt-item-stats">DMG: 34 | TIER 3 MILITARY | 5.56mm</span>
+            </div>
+        </div>
+
+        <!-- Left Status Panel: Player Vital Stats -->
+        <div class="hud-left">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">OPERATOR VITAL SIGNALS</span>
+                    <span class="stat-val" id="hp-text">100 / 100</span>
+                </div>
+                <div class="bar-outer hp-bg">
+                    <div class="bar-fill hp-fill" id="hp-bar" style="width: 100%;"></div>
+                </div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <span class="stat-label">STAMINA / SPRINT CAPACITY</span>
+                    <span class="stat-val" id="stamina-text">100%</span>
+                </div>
+                <div class="bar-outer stamina-bg">
+                    <div class="bar-fill stamina-fill" id="stamina-bar" style="width: 100%;"></div>
+                </div>
+            </div>
+
+            <div class="weight-card">
+                <span class="weight-icon">⚖</span>
+                <span class="weight-label">CARRIED WEIGHT:</span>
+                <span class="weight-val" id="weight-text">6.8 / 15.0 KG</span>
+            </div>
+        </div>
+
+        <!-- Right Status Panel: Minimap & Threat Radar -->
+        <div class="hud-right">
+            <div class="minimap-container">
+                <canvas id="minimap-canvas" width="160" height="160"></canvas>
+                <div class="minimap-label">OFFLINE THREAT RADAR</div>
+            </div>
+        </div>
+
+        <!-- Bottom Panel: Weapon Inventory & Ammo Slots -->
+        <div class="hud-bottom">
+            <!-- Weapon Slot 1 -->
+            <div class="weapon-slot active-slot" id="slot-0">
+                <div class="slot-badge">KEY 1</div>
+                <div class="weapon-tier tier-2" id="slot-0-tier">TACTICAL</div>
+                <div class="weapon-name" id="slot-0-name">M9 PISTOL</div>
+                <div class="weapon-ammo">
+                    <span class="cur-ammo" id="slot-0-cur">15</span> / <span class="max-ammo" id="slot-0-max">45</span>
+                </div>
+                <div class="ammo-type" id="slot-0-type">9mm NATO</div>
+            </div>
+
+            <!-- Weapon Slot 2 -->
+            <div class="weapon-slot empty-slot" id="slot-1">
+                <div class="slot-badge">KEY 2</div>
+                <div class="weapon-tier tier-0" id="slot-1-tier">EMPTY</div>
+                <div class="weapon-name" id="slot-1-name">[ UNARMED ]</div>
+                <div class="weapon-ammo">
+                    <span class="cur-ammo" id="slot-1-cur">--</span> / <span class="max-ammo" id="slot-1-max">--</span>
+                </div>
+                <div class="ammo-type" id="slot-1-type">PRESS [E] TO EQUIP WEAPON</div>
+            </div>
+
+            <!-- System Quick Bar -->
+            <div class="quick-bar">
+                <span class="quick-tip">[WASD] Move &nbsp;|&nbsp; [SHIFT] Sprint &nbsp;|&nbsp; [C] Crouch &nbsp;|&nbsp; [R] Reload &nbsp;|&nbsp; [K] Quick Save &nbsp;|&nbsp; [L] Quick Load &nbsp;|&nbsp; [ESC] Menu</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast System -->
+    <div id="notification-container"></div>
+
+    <!-- Pause & Save Manager Modal -->
+    <div id="pause-menu" class="menu-hidden">
+        <div class="menu-backdrop"></div>
+        <div class="menu-modal">
+            <div class="menu-header">
+                <h2>TACTICAL COMMAND MENU</h2>
+                <div class="status-offline-badge">● 100% OFFLINE PERSISTENCE ACTIVE</div>
+            </div>
+
+            <div class="menu-tabs">
+                <button class="tab-btn active" onclick="switchTab('tab-save')">SAVE / LOAD GAME</button>
+                <button class="tab-btn" onclick="switchTab('tab-inventory')">LOADOUT WEIGHT & STATS</button>
+                <button class="tab-btn" onclick="switchTab('tab-map')">OPERATIONAL MAP MATRIX</button>
+                <button class="tab-btn" onclick="switchTab('tab-controls')">CONTROLS REFERENCE</button>
+            </div>
+
+            <div class="tab-content" id="tab-save">
+                <div class="save-actions">
+                    <button class="btn btn-primary" id="btn-save">💾 SAVE GAME TO LOCAL STORAGE [K]</button>
+                    <button class="btn btn-secondary" id="btn-load">📂 LOAD SAVED STATE [L]</button>
+                    <button class="btn btn-danger" id="btn-reset">⚠️ RESET ALL PROGRESS & SEED</button>
+                </div>
+                <div class="save-info-card">
+                    <h4>LOCAL SAVE STATE DETAILS</h4>
+                    <p id="save-status-text">No save state detected in local storage.</p>
+                </div>
+            </div>
+
+            <div class="tab-content hidden" id="tab-inventory">
+                <div class="inventory-breakdown" id="inventory-breakdown-panel">
+                    <!-- Populated dynamically via JS -->
+                </div>
+            </div>
+
+            <div class="tab-content hidden" id="tab-map">
+                <div class="map-matrix-view">
+                    <div class="matrix-zone z1">
+                        <span class="zone-name">ZONE 1: SURVIVOR VILLAGE</span>
+                        <span class="zone-desc">Low risk | Civilian Pistols & Hunting Rifles | Weak Scavengers</span>
+                    </div>
+                    <div class="matrix-zone z2">
+                        <span class="zone-name">ZONE 2: POLICE ROADBLOCK</span>
+                        <span class="zone-desc">Medium risk | SMGs & Shotguns | Organized Tactical Patrols</span>
+                    </div>
+                    <div class="matrix-zone z3">
+                        <span class="zone-name">ZONE 3: MILITARY FORTRESS</span>
+                        <span class="zone-desc">Extreme risk | Assault Rifles, Snipers, Explosives | Heavy Armored Boss Faction</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tab-content hidden" id="tab-controls">
+                <div class="controls-grid">
+                    <div><span class="key">WASD</span> Movement</div>
+                    <div><span class="key">Mouse</span> Look Around (Click to lock)</div>
+                    <div><span class="key">Left Click</span> Fire Weapon</div>
+                    <div><span class="key">Right Click</span> Aim Down Sights / Zoom</div>
+                    <div><span class="key">E</span> Interact / Pick Up & Swap Weapon</div>
+                    <div><span class="key">1 / 2</span> Switch Equipped Primary Weapon</div>
+                    <div><span class="key">R</span> Reload Magazine</div>
+                    <div><span class="key">Shift</span> Sprint</div>
+                    <div><span class="key">C</span> Crouch / Cover stance</div>
+                    <div><span class="key">K / L</span> Quick Save / Quick Load</div>
+                    <div><span class="key">ESC</span> Toggle Command Menu</div>
+                </div>
+            </div>
+
+            <div class="menu-footer">
+                <button class="btn btn-primary" id="btn-resume">RESUME OPERATION</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Scripts -->
+    <script src="src/js/config.js"></script>
+    <script src="src/js/engine.js"></script>
+    <script src="src/js/world.js"></script>
+    <script src="src/js/player.js"></script>
+    <script src="src/js/inventory.js"></script>
+    <script src="src/js/weapons.js"></script>
+    <script src="src/js/ai.js"></script>
+    <script src="src/js/saveSystem.js"></script>
+    <script src="src/js/ui.js"></script>
+    <script src="src/js/app.js"></script>
+</body>
+</html>
